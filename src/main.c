@@ -25,6 +25,7 @@
 #include "defs.h"
 #include "log.h"
 #include "framebuffer.h"
+#include "utf8-utils.h"
 
 #define FBDEV "/dev/fb0"
 
@@ -304,7 +305,16 @@ void face_get_string_extent (const FT_Face face, const UTF32 *s,
     to 32-bit.
 
   =========================================================================*/
-UTF32 *utf8_to_utf32 (const UTF8 *word)
+int get_slice_len(const char lb) {
+
+  if( ( lb & 0x80 ) == 0 ) return  1;  
+  else if( ( lb & 0xE0) == 0xC0) return 2;  
+  else if( ( lb & 0xF0) == 0xE0) return 3;
+  else if( ( lb & 0xF8) == 0xF0) return 4;
+  return 1;
+}
+/*
+UTF32 *ascii_utf8_to_utf32 (const UTF8 *word)
   {
   assert (word != NULL);
   int l = strlen ((char *)word);
@@ -314,6 +324,38 @@ UTF32 *utf8_to_utf32 (const UTF8 *word)
     ret[i] = (UTF32) word[i];
     }
   ret[l] = 0;
+  return ret;
+  }
+*/
+
+UTF32 *cjk_utf8_to_utf32 (const char *word)
+  {
+  assert (word != NULL);
+  int l = strlen(word);
+  int u8l = utf8_strlen(word);
+
+  char buf[5];
+
+  UTF32 *ret = malloc ((u8l + 1) * sizeof (UTF32));
+  int i=0,j=0;
+  int bskip=1;
+
+  while( i<l )
+  {
+	 
+	bskip = get_slice_len(word[i]);
+	strncpy(buf,&word[i],bskip);
+	if(bskip > 1) {
+		ret[j] = (UTF32)utf8_to_utf32(buf);
+	}else {
+		ret[j] = (UTF32)buf[0];
+	}
+	
+	j++;
+	i+=bskip;
+  }
+
+  ret[u8l] = 0;
   return ret;
   }
 
@@ -516,8 +558,8 @@ int main (int argc, char **argv)
 
 	    // The face_xxx text handling functions take UTF32 character strings
 	    //  as input.
-	    UTF32 *word32 = utf8_to_utf32 ((UTF8 *)word);
-	    
+	    UTF32 *word32 = cjk_utf8_to_utf32(word);
+	    log_debug("word32 %d",word32); 
 	    // Get the extent of the bounding box of this word, to see 
 	    //  if it will fit in the specified width.
 	    int x_extent, y_extent;
@@ -538,7 +580,7 @@ int main (int argc, char **argv)
 	      face_draw_string_on_fb (face, fb, word32, &x, y);
 	      face_draw_string_on_fb (face, fb, utf32_space, &x, y);
 	      }
-	    free (word32);
+	      free (word32);
 	    }
 
 	  done_ft (ft);
