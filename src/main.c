@@ -47,11 +47,11 @@
 
   =========================================================================*/
 BOOL init_ft (const char *ttf_file, FT_Face *face, FT_Library *ft, 
-               int req_size, char **error)
+               int req_size_w,int req_size_h, char **error)
   {
   LOG_IN
   BOOL ret = FALSE;
-  log_debug ("Requested glyph size is %d px", req_size);
+  log_debug ("Requested glyph size is %d %d  px", req_size_w,req_size_h);
   if (FT_Init_FreeType (ft) == 0) 
     {
     log_info ("Initialized FreeType");
@@ -59,14 +59,14 @@ BOOL init_ft (const char *ttf_file, FT_Face *face, FT_Library *ft,
       {
       log_info ("Loaded TTF file");
       // Note -- req_size is a request, not an instruction
-      if (FT_Set_Pixel_Sizes(*face, 0, req_size) == 0)
+      if (FT_Set_Pixel_Sizes(*face, req_size_w, req_size_h) == 0)
         {
         log_info ("Set pixel size");
         ret = TRUE;
         }
       else
         {
-        log_error ("Can't set font size to %d", req_size);
+        log_error ("Can't set font size to %d %d", req_size_w,req_size_h);
         if (error)
           *error = strdup ("Can't set font size");
         }
@@ -182,7 +182,8 @@ void face_draw_char_on_fb (FT_Face face, FrameBuffer *fb,
   int y_off = bbox_ymax - face->glyph->metrics.horiBearingY / 64;
 
   // glyph_width is the pixel width of this specific glyph
-  int glyph_width = face->glyph->metrics.width / 64;
+  int glyph_width  = face->glyph->metrics.width / 64;
+  int glyph_height = face->glyph->metrics.height / 64;
   // Advance is the amount of x spacing, in pixels, allocated
   //   to this glyph
   int advance = face->glyph->metrics.horiAdvance / 64;
@@ -204,6 +205,12 @@ void face_draw_char_on_fb (FT_Face face, FrameBuffer *fb,
   //  empty pixels. bitmap.width is the number of pixels that actually
   //  contain values; bitmap.pitch is the spacing between bitmap
   //  rows in memory.
+  printf("glyph width %d, height %d,bitmap w %d,rows %d \n",
+		  glyph_width,glyph_height,
+		  face->glyph->bitmap.width,
+		  face->glyph->bitmap.rows
+		  );
+
   for (int i = 0; i < (int)face->glyph->bitmap.rows; i++)
     {
     // Row offset is the distance from the top of the framebuffer
@@ -218,14 +225,20 @@ void face_draw_char_on_fb (FT_Face face, FrameBuffer *fb,
       //  is how far the glyph extends about the baseline. We push
       //  the bitmap down by the height of the bounding box, and then
       //  back up by this "bearing" value. 
-      if (p)
+      if (p) {
+	printf("+");
         framebuffer_set_pixel (fb, *x + j + x_off, row_offset, p, p, p);
+      }else {
+	printf("0");
       }
+
     }
+    printf("\n");
+   }
   // horiAdvance is the nominal X spacing between displayed glyphs. 
   *x += advance;
   }
-
+ 
 /*===========================================================================
 
   face_draw_string_on_fb
@@ -373,11 +386,12 @@ void usage (const char *argv0)
   fprintf (stderr, "All positions and sizes are in screen pixels.\n");
   fprintf (stderr, "  -c,--clear             clear screen before writing\n");
   fprintf (stderr, "  -d,--dev=device        framebuffer device (/dev/fb0)\n");
-  fprintf (stderr, "  -f,--font-size=N       font height in pixels (20)\n");
+  fprintf (stderr, "  -w,--font-size-width=N       font width in pixels (20)\n");
+  fprintf (stderr, "  -h,--font-size-height=N       font height in pixels (20)\n");
   fprintf (stderr, "  -l,--log-level=[0..4]  log verbosity (0) \n");
-  fprintf (stderr, "  -h,--height=N          height of bounding box (500)\n");
+  fprintf (stderr, "  -H,--height=N          height of bounding box (500)\n");
   fprintf (stderr, "  -v,--version           show version\n");
-  fprintf (stderr, "  -w,--width=N           width of bounding box (500)\n");
+  fprintf (stderr, "  -W,--width=N           width of bounding box (500)\n");
   fprintf (stderr, "  -x=N                   initial X coordinate (5)\n");
   fprintf (stderr, "  -y=N                   initial Y coordinate (5)\n");
   }
@@ -398,12 +412,13 @@ int main (int argc, char **argv)
   int init_y = 5;
   int width = 500;
   int height = 500;
-  int font_size = 20;
+  int font_size_height = 20;
+  int font_size_width=0;
   BOOL show_usage = FALSE;
   BOOL show_version = FALSE;
   BOOL clear = FALSE;
   char *fbdev = strdup (FBDEV);
-  int log_level = LOG_ERROR;
+  int log_level = LOG_TRACE;
 
   // Command line option table
 
@@ -414,11 +429,12 @@ int main (int argc, char **argv)
       {"version", no_argument, NULL, 'v'},
       {"log-level", required_argument, NULL, 'l'},
       {"dev", required_argument, NULL, 'd'},
-      {"font-size", required_argument, NULL, 'f'},
+      {"font-size-width", required_argument, NULL, 'w'},
+      {"font-size-height", required_argument, NULL, 'h'},
       {"x", required_argument, NULL, 'x'},
       {"y", required_argument, NULL, 'y'},
-      {"width", required_argument, NULL, 'w'},
-      {"height", required_argument, NULL, 'h'},
+      {"width", required_argument, NULL, 'W'},
+      {"height", required_argument, NULL, 'H'},
       {0, 0, 0, 0}
     };
 
@@ -432,7 +448,7 @@ int main (int argc, char **argv)
    while (ret)
      {
      int option_index = 0;
-     opt = getopt_long (argc, argv, "c?vl:f:x:y:w:h:d:",
+     opt = getopt_long (argc, argv, "c?vl:w:h:x:y:W:H:d:",
      long_options, &option_index);
 
      if (opt == -1) break;
@@ -456,8 +472,10 @@ int main (int argc, char **argv)
            init_x = atoi (optarg); 
          else if (strcmp (long_options[option_index].name, "y") == 0)
            init_y = atoi (optarg); 
-         else if (strcmp (long_options[option_index].name, "font-size") == 0)
-           init_y = atoi (optarg); 
+         else if (strcmp (long_options[option_index].name, "font-size-height") == 0)
+           font_size_height = atoi (optarg); 
+	 else if (strcmp (long_options[option_index].name, "font-size-width") == 0)
+           font_size_width = atoi (optarg);
          else if (strcmp (long_options[option_index].name, "dev") == 0)
            { free (fbdev); fbdev = strdup (optarg); } 
          else
@@ -471,12 +489,14 @@ int main (int argc, char **argv)
          clear = TRUE; break; 
        case 'l':
            log_level = atoi (optarg); break;
-       case 'w': 
+       case 'W': 
            width = atoi (optarg); break;
-       case 'h': 
+       case 'H': 
            height = atoi (optarg); break;
-       case 'f': 
-           font_size = atoi (optarg); break;
+       case 'h': 
+           font_size_height = atoi (optarg); break;
+       case 'w':
+	   font_size_width = atoi(optarg);break;
        case 'x': 
            init_x = atoi (optarg); break; 
        case 'y': 
@@ -525,7 +545,7 @@ int main (int argc, char **argv)
 	//  size.
 	FT_Face face;
 	FT_Library ft;
-	if (init_ft (ttf_file, &face, &ft, font_size, &error))
+	if (init_ft (ttf_file, &face, &ft, font_size_width,font_size_height, &error))
 	  {
           log_debug ("Font face initialized OK");
 	  if (clear)
