@@ -46,6 +46,10 @@
   with an error message, that the caller should eventually free.
 
   =========================================================================*/
+
+int font_size_height = 20;
+int font_size_width=0;
+
 BOOL init_ft (const char *ttf_file, FT_Face *face, FT_Library *ft, 
                int req_size_w,int req_size_h, char **error)
   {
@@ -175,11 +179,11 @@ void face_draw_char_on_fb (FT_Face face, FrameBuffer *fb,
   // bbox.yMax is the height of a bounding box that will enclose
   //  any glyph in the face, starting from the glyph baseline.
   int bbox_ymax = face->bbox.yMax / 64;
+  int bbox_ymin = face->bbox.yMin / 64;
   // horiBearingX is the height of the top of the glyph from
   //   the baseline. So we work out the y offset -- the distance
   //   we must push down the glyph from the top of the bounding
   //   box -- from the height and the Y bearing.
-  int y_off = bbox_ymax - face->glyph->metrics.horiBearingY / 64;
 
   // glyph_width is the pixel width of this specific glyph
   int glyph_width  = face->glyph->metrics.width / 64;
@@ -192,6 +196,15 @@ void face_draw_char_on_fb (FT_Face face, FrameBuffer *fb,
   //   glyph width and the advance
   int x_off = (advance - glyph_width) / 2;
 
+  int y_off =  bbox_ymax - face->glyph->metrics.horiBearingY / 64;
+  
+  //fix y_off for font_size_height
+  while( (y_off+glyph_height) > font_size_height) {
+
+    y_off--;
+    if(y_off <=0) { y_off = 0; break; }
+  }
+   
   // So now we have (x_off,y_off), the location at which to
   //   start drawing the glyph bitmap.
 
@@ -205,7 +218,9 @@ void face_draw_char_on_fb (FT_Face face, FrameBuffer *fb,
   //  empty pixels. bitmap.width is the number of pixels that actually
   //  contain values; bitmap.pitch is the spacing between bitmap
   //  rows in memory.
-  printf("glyph width %d, height %d,bitmap w %d,rows %d \n",
+  printf("bbox ymin %d, bbox ymax %d, metrics height %d ,glyph width %d, height %d,bitmap w %d,rows %d \n",
+        bbox_ymin,bbox_ymax,
+                  face->size->metrics.height/64,
 		  glyph_width,glyph_height,
 		  face->glyph->bitmap.width,
 		  face->glyph->bitmap.rows
@@ -225,6 +240,8 @@ void face_draw_char_on_fb (FT_Face face, FrameBuffer *fb,
       //  is how far the glyph extends about the baseline. We push
       //  the bitmap down by the height of the bounding box, and then
       //  back up by this "bearing" value. 
+      //printf("x %d y %d\n",*x + j + x_off, row_offset);
+
       if (p) {
 	printf("+");
         framebuffer_set_pixel (fb, *x + j + x_off, row_offset, p, p, p);
@@ -412,8 +429,6 @@ int main (int argc, char **argv)
   int init_y = 5;
   int width = 500;
   int height = 500;
-  int font_size_height = 20;
-  int font_size_width=0;
   BOOL show_usage = FALSE;
   BOOL show_version = FALSE;
   BOOL clear = FALSE;
