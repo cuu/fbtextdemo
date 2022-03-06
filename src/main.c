@@ -195,16 +195,24 @@ void face_draw_char_on_fb (FT_Face face, FrameBuffer *fb,
   //   the x offset -- by halving the space between the 
   //   glyph width and the advance
   int x_off = (advance - glyph_width) / 2;
+  int horiY = face->glyph->metrics.horiBearingY / 64;
 
-  int y_off =  bbox_ymax - face->glyph->metrics.horiBearingY / 64;
+  int diffY = glyph_height - horiY;
   
+  int y_off =  font_size_height - face->glyph->metrics.horiBearingY / 64;
+  
+  if(diffY > 0) {
+     y_off = y_off - diffY;
+  }
+  
+   
   //fix y_off for font_size_height
   while( (y_off+glyph_height) > font_size_height) {
 
     y_off--;
     if(y_off <=0) { y_off = 0; break; }
   }
-   
+  
   // So now we have (x_off,y_off), the location at which to
   //   start drawing the glyph bitmap.
 
@@ -218,8 +226,8 @@ void face_draw_char_on_fb (FT_Face face, FrameBuffer *fb,
   //  empty pixels. bitmap.width is the number of pixels that actually
   //  contain values; bitmap.pitch is the spacing between bitmap
   //  rows in memory.
-  printf("bbox ymin %d, bbox ymax %d, metrics height %d ,glyph width %d, height %d,bitmap w %d,rows %d \n",
-        bbox_ymin,bbox_ymax,
+  printf("bbox ymin %d, bbox ymax %d, horiBearingY %d, metrics height %d ,glyph width %d, height %d,bitmap w %d,rows %d \n",
+        bbox_ymin,bbox_ymax, face->glyph->metrics.horiBearingY / 64,
                   face->size->metrics.height/64,
 		  glyph_width,glyph_height,
 		  face->glyph->bitmap.width,
