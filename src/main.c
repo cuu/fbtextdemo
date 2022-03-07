@@ -21,6 +21,8 @@
 #include <assert.h>
 #include <freetype2/ft2build.h>
 #include <freetype/freetype.h>
+#include <freetype/ftglyph.h>
+
 #include <getopt.h>
 #include "defs.h"
 #include "log.h"
@@ -47,7 +49,7 @@
 
   =========================================================================*/
 
-int font_size_height = 20;
+int font_size_height =0;
 int font_size_width=0;
 
 BOOL init_ft (const char *ttf_file, FT_Face *face, FT_Library *ft, 
@@ -167,8 +169,8 @@ void face_draw_char_on_fb (FT_Face face, FrameBuffer *fb,
   //  all the characters to be displayed. 
   FT_UInt gi = FT_Get_Char_Index (face, c);
 
-  // Loading the glyph makes metrics data available
-  FT_Load_Glyph (face, gi, FT_LOAD_DEFAULT);
+  // Loading the glyph makes metrics data available // do not add  FT_LOAD_NO_RECURSE ,FT_LOAD_NO_SCALE 
+  FT_Load_Glyph (face, gi, FT_LOAD_DEFAULT| FT_LOAD_NO_HINTING |  FT_LOAD_NO_AUTOHINT|FT_LOAD_MONOCHROME );
 
   // Now we have the metrics, let's work out the x and y offset
   //  of the glyph from the specified x and y. Because there is
@@ -178,41 +180,60 @@ void face_draw_char_on_fb (FT_Face face, FrameBuffer *fb,
 
   // bbox.yMax is the height of a bounding box that will enclose
   //  any glyph in the face, starting from the glyph baseline.
-  int bbox_ymax = face->bbox.yMax / 64;
-  int bbox_ymin = face->bbox.yMin / 64;
+  int dpx = 64;
+  int bbox_ymax = face->bbox.yMax / dpx;
+  int bbox_ymin = face->bbox.yMin / dpx;
   // horiBearingX is the height of the top of the glyph from
   //   the baseline. So we work out the y offset -- the distance
   //   we must push down the glyph from the top of the bounding
   //   box -- from the height and the Y bearing.
+  printf("bbox_ymax %d ,bbox_ymin %d\n",face->bbox.yMax , face->bbox.yMin );
+
+  int font_height = round((face->bbox.yMax - face->bbox.yMin)*font_size_height / face->units_per_EM);
+  int font_width = round((face->bbox.xMax - face->bbox.xMin)*font_size_width / face->units_per_EM);
+  int baseline_height = abs(face->descender) * font_size_height / face->units_per_EM;
+  printf("font_height %d, font_width %d, baseline_height %d\n",
+	font_height,
+	font_width,
+	baseline_height);
 
   // glyph_width is the pixel width of this specific glyph
-  int glyph_width  = face->glyph->metrics.width / 64;
-  int glyph_height = face->glyph->metrics.height / 64;
+  int glyph_width  = face->glyph->metrics.width / dpx;
+  int glyph_height = face->glyph->metrics.height / dpx;
   // Advance is the amount of x spacing, in pixels, allocated
   //   to this glyph
-  int advance = face->glyph->metrics.horiAdvance / 64;
+  int advance = face->glyph->metrics.horiAdvance / dpx;
   // Work out where to draw the left-most row of pixels --
   //   the x offset -- by halving the space between the 
   //   glyph width and the advance
   int x_off = (advance - glyph_width) / 2;
-  int horiY = face->glyph->metrics.horiBearingY / 64;
+  int horiY = face->glyph->metrics.horiBearingY / dpx;
+  int real_font_size_height = face->size->metrics.height/ dpx;
 
-  int diffY = glyph_height - horiY;
-  
-  int y_off =  font_size_height - face->glyph->metrics.horiBearingY / 64;
-  
-  if(diffY > 0) {
-     y_off = y_off - diffY;
-  }
-  
-   
+  int line_height = (face->size->metrics.ascender - face->size->metrics.descender) >> 6;
+  printf("line_height %d\n",line_height); 
+
+  int y_off = line_height - baseline_height -horiY;
+
+  printf("yscale %d\n",  FT_MulFix(face->bbox.xMax, face->size->metrics.y_scale) >> 6 );
+
+  /*
+  FT_BBox  cbox;
+  FT_Glyph_Get_CBox( face->glyph, 0, &cbox );
+  printf("CBox yMin %d yMax %d, xMin %d,xMax %d\n",cbox.yMin,
+						cbox.yMax,
+						cbox.xMin,
+						cbox.xMax); 
+  */
+
+  /* 
   //fix y_off for font_size_height
   while( (y_off+glyph_height) > font_size_height) {
 
     y_off--;
     if(y_off <=0) { y_off = 0; break; }
   }
-  
+  */
   // So now we have (x_off,y_off), the location at which to
   //   start drawing the glyph bitmap.
 
@@ -227,8 +248,8 @@ void face_draw_char_on_fb (FT_Face face, FrameBuffer *fb,
   //  contain values; bitmap.pitch is the spacing between bitmap
   //  rows in memory.
   printf("bbox ymin %d, bbox ymax %d, horiBearingY %d, metrics height %d ,glyph width %d, height %d,bitmap w %d,rows %d \n",
-        bbox_ymin,bbox_ymax, face->glyph->metrics.horiBearingY / 64,
-                  face->size->metrics.height/64,
+        bbox_ymin,bbox_ymax, face->glyph->metrics.horiBearingY / dpx,
+                  face->size->metrics.height/ dpx,
 		  glyph_width,glyph_height,
 		  face->glyph->bitmap.width,
 		  face->glyph->bitmap.rows
