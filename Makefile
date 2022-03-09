@@ -3,7 +3,7 @@ VERSION := 0.1a
 CC      :=  gcc 
 FTINC   := /usr/include/freetype2
 INCLUDE := $(FTINC)
-LIBS    := -lfreetype ${EXTRA_LIBS} 
+LIBS    := -lfreetype -lm ${EXTRA_LIBS} 
 TARGET	:= $(NAME)
 SOURCES := $(shell find src/ -type f -name *.c)
 OBJECTS := $(patsubst src/%,build/%,$(SOURCES:.c=.o))

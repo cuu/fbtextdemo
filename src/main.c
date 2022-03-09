@@ -51,6 +51,7 @@
 
 int font_size_height =0;
 int font_size_width=0;
+int angle =0;
 
 BOOL init_ft (const char *ttf_file, FT_Face *face, FT_Library *ft, 
                int req_size_w,int req_size_h, char **error)
@@ -167,10 +168,21 @@ void face_draw_char_on_fb (FT_Face face, FrameBuffer *fb,
   //  zero. We should really check for this, and substitute a default
   //  glyph. Naturally, the TTF font chosen must contain glyphs for
   //  all the characters to be displayed. 
+
+  if(angle != 0) {
+  	double _angle = ( (double)angle / 360 ) * 3.14159 * 2;
+  	FT_Matrix     matrix;
+  	matrix.xx = (FT_Fixed)( cos( _angle ) * 0x10000L );
+  	matrix.xy = (FT_Fixed)(-sin( _angle ) * 0x10000L );
+  	matrix.yx = (FT_Fixed)( sin( _angle ) * 0x10000L );
+  	matrix.yy = (FT_Fixed)( cos( _angle ) * 0x10000L );
+  	FT_Set_Transform( face, &matrix,NULL);
+  }
   FT_UInt gi = FT_Get_Char_Index (face, c);
 
   // Loading the glyph makes metrics data available // do not add  FT_LOAD_NO_RECURSE ,FT_LOAD_NO_SCALE 
   FT_Load_Glyph (face, gi, FT_LOAD_DEFAULT| FT_LOAD_NO_HINTING |  FT_LOAD_NO_AUTOHINT|FT_LOAD_MONOCHROME );
+
 
   // Now we have the metrics, let's work out the x and y offset
   //  of the glyph from the specified x and y. Because there is
@@ -473,6 +485,7 @@ int main (int argc, char **argv)
       {"version", no_argument, NULL, 'v'},
       {"log-level", required_argument, NULL, 'l'},
       {"dev", required_argument, NULL, 'd'},
+      {"angle",required_argument,NULL,'a'},
       {"font-size-width", required_argument, NULL, 'w'},
       {"font-size-height", required_argument, NULL, 'h'},
       {"x", required_argument, NULL, 'x'},
@@ -492,7 +505,7 @@ int main (int argc, char **argv)
    while (ret)
      {
      int option_index = 0;
-     opt = getopt_long (argc, argv, "c?vl:w:h:x:y:W:H:d:",
+     opt = getopt_long (argc, argv, "c?vl:w:h:x:y:W:H:d:a:",
      long_options, &option_index);
 
      if (opt == -1) break;
@@ -521,7 +534,10 @@ int main (int argc, char **argv)
 	 else if (strcmp (long_options[option_index].name, "font-size-width") == 0)
            font_size_width = atoi (optarg);
          else if (strcmp (long_options[option_index].name, "dev") == 0)
-           { free (fbdev); fbdev = strdup (optarg); } 
+           { free (fbdev); fbdev = strdup (optarg); }
+         else if (strcmp (long_options[option_index].name, "angle") == 0) {
+           angle = atoi(optarg);
+         } 
          else
            exit (-1);
          break;
@@ -547,6 +563,8 @@ int main (int argc, char **argv)
            init_y = atoi (optarg); break;
        case 'd': 
            free (fbdev); fbdev = strdup (optarg); break;
+       case 'a':
+           angle = atoi(optarg);break;
        default:
          ret = FALSE; 
        }
